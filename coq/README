@@ -1,0 +1,16 @@
+
+  This directory contains a port to Coq v8 of a fully checked proof of the
+Four Colour Theorem, which was originally carried out with version 7.3.1 of
+the Coq proof assistant.
+  Unlike its predecessor, this formalization requires an extended version of
+the Coq v8 system to compile (support for some script-level extensibility
+features heavily used by the original proof was discontinued for Coq v8).
+  The required extension package, named "ssreflect" (for "small-scale
+reflection") is distributed separately. It consists of a single extended ML
+(.ml4) file, which compiles to a library that must be linked with the Coq
+system, using either the -load-ml-object command line switch (for bytecode
+systems, not recommended) or, preferably, the coqmktop utility to produce
+a new Coq system binary. The definition of the COQC variable in the Makefile
+should be adjusted to refer to this new system (it defaults to ./ssrcoq.exe).
+  Note that this directory contains a copy of the vernacular files needed to
+support the ssreflect extensions (ssreflect.v and ssrbool.v).
