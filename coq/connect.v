@@ -1,12 +1,13 @@
 (* (c) Copyright Microsoft Corporation and Inria. All rights reserved. *)
 Require Import ssreflect.
+Require Import ssrfun.
 Require Import ssrbool.
-Require Import funs.
-Require Import dataset.
+Require Import eqtype.
 Require Import ssrnat.
 Require Import seq.
-Require Import paths.
-Require Import finset.
+Require Import path.
+Require Import fintype.
+Require Import compat.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -17,89 +18,89 @@ Import Prenex Implicits.
 
 Section Connect.
 
-Variables (d : finSet) (e : rel d).
+Variables (d : finType) (e : rel d).
 
 Fixpoint dfs (n : nat) (a : seq d) (x : d) {struct n} : seq d :=
   if n is S n' then
-    if a x then a else foldl (dfs n') (Adds x a) (filter (e x) (enum d))
+    if x \in a then a else foldl (dfs n') (cons x a) (filter (e x) (enum d))
   else a.
 
-Definition connect : rel d := fun x => dfs (card d) seq0 x.
+Definition connect : rel d := fun x => mem (dfs #|d| nil x).
 
-Lemma subset_dfs : forall n (a b : seq d), subset a (foldl (dfs n) a b).
+Lemma subset_dfs : forall n (a b : seq d), a \subset (foldl (dfs n) a b).
 Proof.
-have Hs := @subset_refl d; elim=> [|n Hrec] a b; first by elim: b.
+have Hs := @subxx d; elim=> [|n Hrec] a b; first by elim: b.
 elim: b a => [|x b Hrecb] a //; apply: subset_trans (Hrecb _).
-simpl; case (a x); first done; apply: subset_trans (Hrec _ _).
+simpl; case (_ \in _); first done; apply: subset_trans (Hrec _ _).
 by apply/subsetP => y Ht; apply/orP; right.
 Qed.
 
 Inductive dfs_path (x y : d) (a : seq d) : Prop :=
-  DfsPath p (_ : path e x p) (_ : last x p = y) (_ : disjoint (Adds x p) a).
+  DfsPath p (_ : path e x p) (_ : last x p = y) (_ : [disjoint (cons x p) & a]).
 
-Lemma dfsP : forall n x y (a : seq d), card d <= card a + n ->
-  negb (a y) -> reflect (dfs_path x y a) (dfs n a x y).
+Lemma dfsP : forall n x y (a : seq d), #|d| <= #|a| + n ->
+  negb (y \in a) -> reflect (dfs_path x y a) (y \in dfs n a x).
 Proof.
 elim=> [|n Hrec] x y a Hn Hy.
-case/idPn: (max_card (setU1 y a)).
-  by rewrite -ltnNge cardU1 (negbE Hy) /= addSn addnC.
-simpl; case Hx: (a x).
-  rewrite (negbE Hy); right; move=> [p Hp Ep Hpa].
-  by case/idP: (set0P Hpa x); rewrite /setI /= setU11.
-move Da': (Adds x a) => a'; case Hya': (a' y).
+case/idPn: (max_card (predU1 y (mem a))).
+  by rewrite -ltnNge cardU1 (negbTE Hy) /= addSn addnC.
+simpl; case Hx: (x \in a).
+  rewrite (negbTE Hy); right; move=> [p Hp Ep Hpa].
+  by case/idP: (pred0P Hpa x); rewrite /predI /= mem_head.
+move Da': (cons x a) => a'; case Hya': (y \in a').
   rewrite (subsetP (subset_dfs n _ _) _ Hya'); left.
-  exists (Seq0 d); repeat split; last by rewrite disjoint_has /= Hx.
-  by rewrite -Da' /= in Hya'; case/setU1P: Hya'; last by rewrite (negbE Hy).
-have Hna': card d <= card a' + n.
+  exists nil; repeat split; last by rewrite disjoint_has /= Hx.
+  by rewrite -Da' /= in_cons in Hya'; case/predU1P: Hya'; last by rewrite (negbTE Hy).
+have Hna': #|d| <= #|a'| + n.
   by rewrite -Da' /= cardU1 Hx /= add1n addSnnS.
 move Db: (filter (e x) (enum d)) => b.
-suffice Hrec':
-    reflect (exists2 x', b x' & dfs_path x' y a') (foldl (dfs n) a' b y).
+suff Hrec':
+    reflect (exists2 x', x' \in b & dfs_path x' y a') (y \in foldl (dfs n) a' b).
 - apply: {Hrec Hrec'}(iffP Hrec') => [[x' Hx' [p Hp Ep Hpa]] | [p Hp Ep Hpa]].
     rewrite -Da' /= disjoint_sym disjointU1 in Hpa; move/andP: Hpa => [Hpx Hpa].
-    exists (Adds x' p); try by rewrite //= disjointU1 Hx disjoint_sym.
-    by rewrite -Db filter_enum in Hx'; rewrite /= Hx'.
+    exists (cons x' p); try by rewrite //= disjointU1 Hx disjoint_sym.
+    by rewrite -Db filter_enum /in_mem /= in Hx'; rewrite /= Hx'.
   case/shortenP: Hp Ep => [[|y' p']] /= Hp' Up' Hp'p Dy.
-    by rewrite -Da' Dy /= setU11 in Hya'.
+    by rewrite -Da' Dy /= mem_head in Hya'.
   move/andP: Hp' => [Hxy' Hp']; move/andP: Up' => [Hp'x' _].
   exists y'; [ by rewrite -Db filter_enum | exists p'; auto ].
   rewrite disjoint_sym -Da' /= disjointU1 Hp'x' /= disjoint_sym.
-  by apply: disjoint_trans Hpa; apply/subsetP => [z Hz]; apply: setU1r; auto.
+   by apply: disjoint_trans Hpa; apply/subsetP => [z Hz]; apply: predU1r; apply (Hp'p z); auto.
 elim: b a' Hya' Hna' {a x Da' Db Hy Hn Hx} => [|x b Hrecb] a Hy Hn /=.
   by rewrite Hy; right; case.
-have Ha := subset_dfs n a (seq1 x); simpl in Ha.
-case Hdfs_y: (dfs n a x y).
+have Ha := subset_dfs n a [:: x]; simpl in Ha.
+case Hdfs_y: (y \in dfs n a x).
   rewrite (subsetP (subset_dfs n _ b) _ Hdfs_y); left.
-  exists x; [ apply setU11 | apply: (Hrec _); auto; exact (negbI Hy) ].
+  exists x; [ apply mem_head | apply: (Hrec _); auto; exact (negbT Hy) ].
 have Hca := subset_leq_card Ha; rewrite -(leq_add2r n) in Hca.
 apply: {Hrecb Hca}(iffP (Hrecb _ Hdfs_y (leq_trans Hn Hca))).
   move=> [x' Hx' [p Hp Ep Hpa]]; rewrite disjoint_sym in Hpa.
-  exists x'; [ by apply setU1r | exists p; try split; try done ].
+  exists x'; [ rewrite in_cons; by apply predU1r | exists p; try split; try done ].
   rewrite disjoint_sym; exact (disjoint_trans Ha Hpa).
 move=> [x' Hx' [p Hp Ep Hpa]].
-case Hpa': (disjoint (Adds x' p) (dfs n a x)).
+case Hpa': (disjoint (mem (cons x' p)) (mem (dfs n a x))).
   case/orP: Hx' => [Dx'|Hx']; last by exists x'; auto; exists p.
-  move: (set0P Hpa x') => Hax'; rewrite /setI /= setU11 /= in Hax'.
-  case/idP: (set0P Hpa' x'); rewrite /setI /= setU11 /=.
-  apply/(Hrec _ _ _ Hn (negbI Hax')).
-  exists (Seq0 d); auto; first by apply: eqP.
-  by rewrite disjoint_has /= (eqP Dx') Hax'.
-case/(Hrec _ _ _ Hn (negbI Hy)): Hdfs_y.
-case/set0Pn: Hpa' => [x'' H]; case/andP: H => [Hpx'' Hdfs_x''].
-have Hax'' := set0P Hpa x''; rewrite /setI (Hpx'') /= in Hax''.
-case/(Hrec _ _ _ Hn (negbI Hax'')): Hdfs_x'' => [q Hq Eq Hqa].
-case/splitPl: {p Hpa'}Hpx'' Hp Ep Hpa => [p1 p2 Ep1].
-rewrite path_cat -cat_adds disjoint_cat last_cat Ep1.
+  move: (pred0P Hpa x') => Hax'; rewrite /predI /= mem_head /= in Hax'.
+  case/idP: (pred0P Hpa' x'); rewrite /predI /= mem_head /=.
+  apply/(Hrec _ _ _ Hn (negbT Hax')).
+  exists nil; auto; simpl; first by apply esym; apply: eqP.
+  by rewrite disjoint_has /= -(eqP Dx') Hax'.
+case/(Hrec _ _ _ Hn (negbT Hy)): Hdfs_y.
+case/pred0Pn: Hpa' => [x'' H]; case/andP: H => [Hpx'' Hdfs_x''].
+have Hax'' := pred0P Hpa x''; simpl in Hpx''; rewrite /predI /= Hpx'' /= in Hax''.
+case/(Hrec _ _ _ Hn (negbT Hax'')): Hdfs_x'' => [q Hq Eq Hqa].
+case/splitPl: {p}Hpx'' Hp Ep Hpa => [p1 p2 Ep1].
+rewrite path_cat -cat_cons disjoint_cat last_cat Ep1.
 case/andP=> [Hp1 Hp2] Ep2; case/andP=> [Hp1a Hp2a]; exists (cat q p2).
 - by rewrite path_cat Hq Eq.
 - by rewrite last_cat Eq.
-by rewrite -cat_adds disjoint_cat Hqa.
+by rewrite -cat_cons disjoint_cat Hqa.
 Qed.
 
 Lemma connectPx : forall x y,
   reflect (exists2 p, path e x p & last x p = y) (connect x y).
 Proof.
-move=> x y; apply: (iffP (@dfsP _ x _ seq0 _ _)); trivial.
+move=> x y; apply: (iffP (@dfsP _ x _ nil _ _)); trivial.
 - by rewrite /= card0 leqnn.
 - by move=> [p Hp Ep _]; exists p.
 by move=> [p Hp Ep]; exists p; try rewrite disjoint_has has_sym.
@@ -115,15 +116,15 @@ by apply/connectP; exists (cat p1 p2); rewrite ?path_cat ?Hp1 ?last_cat Ep1.
 Qed.
 
 Lemma connect0 : forall x, connect x x.
-Proof. by move=> x; apply/connectP; exists (Seq0 d). Qed.
+Proof. by move=> x; apply/connectP; exists nil. Qed.
 
 Lemma eq_connect0 : forall x y : d, x = y -> connect x y.
 Proof. move=> x y <-; apply connect0. Qed.
 
 Lemma connect1 : forall x y, e x y -> connect x y.
-Proof. by move=> x y Hxy; apply/connectP; exists (seq1 y); rewrite /= ?Hxy. Qed.
+Proof. by move=> x y Hxy; apply/connectP; exists [:: y]; rewrite /= ?Hxy. Qed.
 
-Lemma path_connect : forall x p, path e x p -> sub_set (Adds x p) (connect x).
+Lemma path_connect : forall x p, path e x p -> {subset (cons x p) <= (connect x)}.
 Proof.
 move=> x p Hp x' Hx'; apply/connectP; case/splitPl: p / Hx' Hp => [p p' Ep].
 by rewrite path_cat; case/andP; exists p.
@@ -131,9 +132,9 @@ Qed.
 
 Definition root x := if pick (connect x) is Some y then y else x.
 
-Definition roots : set d := fun x => root x =d x.
+Definition roots : pred d := fun x => root x == x.
 
-Definition n_comp a := card (setI roots a).
+Definition n_comp a := card (mem (predI roots a)).
 
 Lemma connect_root : forall x, connect x (root x).
 Proof.
@@ -158,7 +159,7 @@ Proof.
 move=> x y; apply introP=> [Hxy|Hxy Hr].
   rewrite /root -(eq_pick (same_connect Hxy)).
   by case: (pickP (connect x)) => [H|Hx] //; case/idP: (Hx y).
-case/idP: Hxy; apply: (connect_trans (connect_root x)).
+case/negP: Hxy; apply: (connect_trans (connect_root x)).
 rewrite Hr He; apply connect_root.
 Qed.
 
@@ -168,7 +169,7 @@ Proof. symmetry; apply: rootPx; apply connect_root. Qed.
 Lemma roots_root : forall x, roots (root x).
 Proof. move=> *; apply/eqP; apply root_root. Qed.
 
-Lemma eqd_root : forall x y, (root x =d root y) = connect x y.
+Lemma eqd_root : forall x y, (root x == root y) = connect x y.
 Proof. move=> *; exact (sameP eqP (rootPx _ _)). Qed.
 
 End Connect.
@@ -178,23 +179,23 @@ Notation "'rootP' He" := (rootPx He _ _) (at level 10, He at level 8).
 
 Prenex Implicits connect root roots n_comp.
 
-Notation "'fconnect' f" := (connect (eqdf f)) (at level 10, f at level 8).
+Notation "'fconnect' f" := (connect (frel f)) (at level 10, f at level 8).
 
-Notation "'froot' f" := (root (eqdf f)) (at level 10, f at level 8).
+Notation "'froot' f" := (root (frel f)) (at level 10, f at level 8).
 
-Notation "'froots' f" := (roots (eqdf f)) (at level 10, f at level 8).
+Notation "'froots' f" := (roots (frel f)) (at level 10, f at level 8).
 
-Notation "'fcard' f" := (n_comp (eqdf f)) (at level 10, f at level 8).
+Notation "'fcard' f" := (n_comp (frel f)) (at level 10, f at level 8).
 
 Section EqConnect.
 
-Variable d : finSet.
+Variable d : finType.
 
 Lemma connect_sub : forall e e' : rel d,
-  sub_rel e (connect e') -> sub_rel (connect e) (connect e').
+  subrel e (connect e') -> subrel (connect e) (connect e').
 Proof.
 move=> e e' He x y; move/connectP=> [p Hp <-] {y}.
-elim: p x Hp => [|y p Hrec] x; [ clear; exact: connect0 | simpl ].
+elim: p x Hp => [|y p Hrec] x; [ move=> _; exact: connect0 | simpl ].
 move/andP=> [Hx Hp]; exact (connect_trans (He _ _ Hx) (Hrec _ Hp)).
 Qed.
 
@@ -202,7 +203,7 @@ Lemma relU_sym : forall e e' : rel d,
   connect_sym e -> connect_sym e' -> connect_sym (relU e e').
 Proof.
 move=> e e' He He'.
-suffice Hsub: forall x y, connect (relU e e') x y -> connect (relU e e') y x.
+suff Hsub: forall x y, connect (relU e e') x y -> connect (relU e e') y x.
   move=> x y; apply/idP/idP; auto.
 move=> x y; move/connectP=> [p Hp <-] {y}.
 elim: p x Hp => [|y p Hrec] x /=; first by rewrite connect0.
@@ -221,39 +222,39 @@ Lemma eq_n_comp : forall e e' : rel d,
   connect e =2 connect e' -> n_comp e =1 n_comp e'.
 Proof.
 move=> e e' Hee' a; apply: eq_card => x.
-by rewrite /setI /roots /root (eq_pick (Hee' x)).
+by rewrite /predI /roots /root /in_mem /= (eq_pick (Hee' x)).
 Qed.
 
-Lemma eq_n_comp_r : forall a a' : set d, a =1 a' ->
+Lemma eq_n_comp_r : forall a a' : pred d, a =1 a' ->
   forall e, n_comp e a = n_comp e a'.
-Proof. by move=> a a' Ha e; apply: eq_card => x; rewrite /setI Ha. Qed.
+Proof. by move=> a a' Ha e; apply: eq_card => x; rewrite /predI /in_mem /= Ha. Qed.
 
-Lemma n_compC : forall a e, n_comp e d = n_comp e a + n_comp e (setC a).
+Lemma n_compC : forall a e, n_comp e d = n_comp e a + n_comp e (predC a).
 Proof.
 move=> a e; rewrite /n_comp cardIC.
-by apply: eq_card => x; rewrite /setI andbT.
+by apply: eq_card => x; rewrite /predI /in_mem /= andbT.
 Qed.
 
 End EqConnect.
 
 Section Closure.
 
-Variables (d : finSet) (e : rel d).
+Variables (d : finType) (e : rel d).
 Hypothesis He : connect_sym e.
 
 Lemma same_connect_rev : connect e =2 connect (fun x y => e y x).
 Proof.
-suffice Hrev: forall e',
-    sub_rel (connect (fun x y : d => e' y x)) (fun x y => connect e' y x).
+suff Hrev: forall e',
+    subrel (connect (fun x y : d => e' y x)) (fun x y => connect e' y x).
 - move=> x y; rewrite He; apply/idP/idP => [Hyx|Hxy]; apply: Hrev; auto.
 move=> e' x y; move/connectP=> [p Hp <-] {y}.
 elim: p x Hp => [|y p Hrec] x /=; first by rewrite connect0.
 move/andP=> [Hyx Hp]; exact (connect_trans (Hrec _ Hp) (connect1 Hyx)).
 Qed.
 
-Definition closed (a : set d) := forall x y, e x y -> a x = a y.
+Definition closed (a : pred d) := forall x y, e x y -> a x = a y.
 
-Lemma intro_closed : forall a : set d,
+Lemma intro_closed : forall a : pred d,
   (forall x y, e x y -> a x -> a y) -> closed a.
 Proof.
 move=> a Ha x y Hxy; apply/idP/idP; first by apply: Ha.
@@ -272,10 +273,10 @@ Qed.
 Lemma connect_closed : forall x, closed (connect e x).
 Proof. by move=> x y z Hyz; apply (same_connect_r He); apply connect1. Qed.
 
-Lemma setC_closed : forall a, closed a -> closed (setC a).
-Proof. by move=> a Ha x y Hxy; rewrite /setC (Ha x y Hxy). Qed.
+Lemma setC_closed : forall a, closed a -> closed (predC a).
+Proof. by move=> a Ha x y Hxy; rewrite /predC /= (Ha x y Hxy). Qed.
 
-Definition closure a : set d := fun x => negb (disjoint (connect e x) a).
+Definition closure a : pred d := fun x => negb (disjoint (mem (connect e x)) a).
 
 Lemma closure_closed : forall a, closed (closure a).
 Proof.
@@ -283,50 +284,52 @@ move=> a; apply intro_closed; move=> x y Hxy.
 by rewrite /closure (eq_disjoint (same_connect He (connect1 Hxy))).
 Qed.
 
-Lemma subset_closure : forall a, subset a (closure a).
+Lemma subset_closure : forall a, a \subset (closure a).
 Proof.
-by move=> a; apply/subsetP => x Hx; apply/set0Pn; exists x; rewrite /setI connect0.
+by move=> a; apply/subsetP => x Hx; apply/pred0Pn; exists x; rewrite /predI /= /in_mem /= connect0.
 Qed.
 
 Lemma n_comp_closure2 : forall x y,
-  n_comp e (closure (set2 x y)) = S (negb (connect e x y)).
+  n_comp e (closure (mem (pred2 x y))) = S (negb (connect e x y)).
 Proof.
 move=> x y; rewrite -(eqd_root He) -card2.
 apply: eq_card => [z]; apply/idP/idP.
-  case/andP=> Hrz; case/set0Pn=> z'; case/andP=> Hzz' Hxyz'.
+  case/andP=> Hrz; case/pred0Pn=> z'; case/andP=> Hzz' Hxyz'.
   rewrite -(eqP Hrz) (rootP He Hzz').
-  by case: (orP Hxyz'); move/eqP=> Dz'; rewrite /set2 Dz' set11 ?orbT.
-case/orP; move/eqP=> <-; rewrite /setI (roots_root He);
-  apply/set0Pn; [ exists x | exists y ];
-  by rewrite /setI /set2 set11 ?orbT He connect_root.
+   by case: (orP Hxyz'); move/eqP=> Dz'; rewrite /pred2 Dz' /in_mem /= eqxx ?orbT.
+rewrite /in_mem /=.
+by case/orP; move/eqP=> ->; rewrite /predI (roots_root He);
+  apply/pred0Pn; [ exists x | exists y ];
+   rewrite /predI /pred2 /= /in_mem /= eqxx ?orbT He connect_root.
 Qed.
 
 Lemma n_comp_connect : forall x, n_comp e (connect e x) = 1.
 Proof.
 move=> x; rewrite -(card1 (root e x)); apply: eq_card => [y].
-apply/andP/eqP => [[Hy Hxy]|<-]; first by rewrite (rootP He Hxy) (eqP Hy).
+rewrite /in_mem /=.
+apply/andP/eqP => [[Hy Hxy]|->]; first by rewrite (rootP He Hxy) (eqP Hy).
 by rewrite (roots_root He) connect_root.
 Qed.
 
 End Closure.
 
-Notation "'fclosed' f" := (closed (eqdf f)) (at level 10, f at level 8).
+Notation "'fclosed' f" := (closed (frel f)) (at level 10, f at level 8).
 
-Notation "'fclosure' f" := (closure (eqdf f)) (at level 10, f at level 8).
+Notation "'fclosure' f" := (closure (frel f)) (at level 10, f at level 8).
 
 Prenex Implicits closed closure.
 
 Section Orbit.
 
-Variables (d : finSet) (f : d -> d).
+Variables (d : finType) (f : d -> d).
 
-Definition order x := card (fconnect f x).
+Definition order x := card (mem (fconnect f x)).
 
 Definition orbit x := traject f x (order x).
 
 Definition findex x y := index y (orbit x).
 
-Definition finv x := iter (pred (order x)) f x.
+Definition finv x := iter (order x).-1 f x.
 
 Lemma fconnect_iter : forall n x, fconnect f x (iter n f x).
 Proof.
@@ -340,8 +343,8 @@ Proof. exact (fconnect_iter 1). Qed.
 Lemma fconnect_finv : forall x, fconnect f x (finv x).
 Proof. move=> x; apply: fconnect_iter. Qed.
 
-Lemma orderSpred : forall x, S (pred (order x)) = order x.
-Proof. by move=> x; rewrite /order (cardD1 x) connect0. Qed.
+Lemma orderSpred : forall x, S (order x).-1 = order x.
+Proof. by move=> x; rewrite /order (cardD1 x) /in_mem /= connect0. Qed.
 
 Lemma size_orbit : forall x : d, size (orbit x) = order x.
 Proof. move=> x; apply: size_traject. Qed.
@@ -352,48 +355,48 @@ move=> x; apply/idPn => [Ux]; rewrite -looping_uniq in Ux.
 case/idP: (ltnn (order x)).
 move: (card_uniqP Ux); rewrite size_traject; move <-.
 apply: subset_leq_card; apply/subsetP=> z.
-move/trajectP=> [i _ <-]; apply fconnect_iter.
+move/trajectP=> [i _ ->]; rewrite /in_mem /=; apply fconnect_iter.
 Qed.
 
-Lemma fconnect_orbit : forall x, fconnect f x =1 orbit x.
+Lemma fconnect_orbit : forall x, fconnect f x =1 mem (orbit x).
 Proof.
 move=> x y; symmetry; apply/idP/idP.
-  move/trajectP=> [i _ <-]; apply fconnect_iter.
-move/connectP=> [q' Hq' <-]; move/fpathP: Hq' => [m <-] {q'}.
+  move/trajectP=> [i _ ->]; apply fconnect_iter.
+move/connectP=> [q' Hq' <-]; move/fpathP: Hq' => [m ->] {q'}.
 rewrite last_traject; apply: loopingP; apply looping_order.
 Qed.
 
 Lemma uniq_orbit : forall x, uniq (orbit x).
 Proof.
 move=> x; rewrite /orbit -orderSpred looping_uniq.
-apply/trajectP => [[i Hi Ei]]; set (n := pred (order x)); case/idP: (ltnn n).
+apply/trajectP => [[i Hi Ei]]; set (n := (order x).-1); case/idP: (ltnn n).
 rewrite {1}/n orderSpred /order -(size_traject f x n).
 apply: (leq_trans (subset_leq_card _) (card_size _)); apply/subsetP => [z].
-rewrite fconnect_orbit; move/trajectP=> [j Hj <-] {z}; apply/trajectP.
+rewrite /in_mem /= fconnect_orbit; move/trajectP=> [j Hj ->] {z}; apply/trajectP.
 rewrite -orderSpred -/n ltnS leq_eqVlt in Hj.
-by case/setU1P: Hj => [Dj|Hj]; [ rewrite Dj; exists i | exists j ].
+by case/predU1P: Hj => [Dj|Hj]; [ rewrite Dj; exists i | exists j ].
 Qed.
 
 Lemma findex_max : forall x y, fconnect f x y -> findex x y < order x.
-Proof. by move=> x y; rewrite fconnect_orbit -index_mem size_orbit. Qed.
+Proof.  by move=> x y; rewrite fconnect_orbit /= -index_mem size_orbit. Qed.
 
 Lemma findex_iter : forall x i, i < order x -> findex x (iter i f x) = i.
 Proof.
-move=> x i Hi; rewrite -(sub_traject f Hi); rewrite -size_orbit in Hi.
+move=> x i Hi; rewrite -(nth_traject f Hi); rewrite -size_orbit in Hi.
 exact (index_uniq x Hi (uniq_orbit x)).
 Qed.
 
 Lemma iter_findex : forall x y, fconnect f x y -> iter (findex x y) f x = y.
 Proof.
 move=> x y; rewrite fconnect_orbit; move=> Hy.
-have Hi := Hy; rewrite -index_mem size_orbit in Hi.
-by rewrite -(sub_traject f Hi) -/(orbit x) sub_index.
+have Hi := Hy; rewrite /= -index_mem size_orbit in Hi.
+by rewrite -(nth_traject f Hi) -/(orbit x) nth_index.
 Qed.
 
 Lemma findex0 : forall x, findex x x = 0.
-Proof. by move=> x; rewrite /findex /orbit -orderSpred /= set11. Qed.
+Proof. by move=> x; rewrite /findex /orbit -orderSpred /= eqxx. Qed.
 
-Lemma fconnect_invariant : forall (d' : dataSet) (k : d -> d'),
+Lemma fconnect_invariant : forall (d' : eqType) (k : d -> d'),
   invariant f k =1 d -> forall x y : d, fconnect f x y -> k x = k y.
 Proof.
 move=> d' k Hk x y; move/iter_findex=> <-; elim: {y}(findex x y) => //= n ->.
@@ -405,17 +408,18 @@ Section Loop.
 Variable p : seq d.
 Hypotheses (Hp : fcycle f p) (Up : uniq p).
 Variable x : d.
-Hypothesis Hx : p x.
+Hypothesis Hx : x \in p.
 
 (* The first lemma does not depend on Up : (uniq p) *)
-Lemma fconnect_cycle : fconnect f x =1 p.
+Lemma fconnect_cycle : fconnect f x =1 mem p.
 Proof.
-case/rot_to: Hx => [i q Dp] y; rewrite -(mem_rot i) Dp.
-have Hp' := Hp; rewrite -(cycle_rot i) {i}Dp (cycle_path x) /= {1}/eqdf in Hp'.
-case/andP: Hp'; move/eqP=> Eq Hq; apply/idP/idP; last by apply path_connect.
-move/connectP=> [q' Hq' <-] {y}; case/fpathP: Hq' => [m <-] {q'}.
-case/fpathP: Hq Eq => [n <-]; rewrite !last_traject f_iter; move=> Dx.
-by apply: (loopingPx f x (S n) _ m); rewrite /looping Dx /= setU11.
+case/rot_to: Hx => [i q Dp] y; rewrite /= -(mem_rot i) Dp.
+have Hp' := Hp; rewrite -(cycle_rot i) {i}Dp (cycle_path x) /= {1}/frel in Hp'.
+case/andP: Hp'; move/eqP=> Eq Hq; apply/idP/idP; last first.
+  by have Hc := path_connect; rewrite /sub_mem /in_mem /= in Hc; rewrite /in_mem /=; apply: Hc.
+move/connectP=> [q' Hq' <-] {y}; case/fpathP: Hq' => [m ->] {q'}.
+case/fpathP: Hq Eq => [n ->]; rewrite !last_traject -iterS -trajectS; move=> Dx.
+by apply/loopingP; rewrite /looping Dx /= mem_head.
 Qed.
 
 Lemma order_cycle : order x = size p.
@@ -425,34 +429,34 @@ Lemma orbit_rot_cycle : {i : nat | orbit x = rot i p}.
 Proof.
 case/rot_to: Hx => [i q Dp]; exists i; rewrite (Dp).
 have Hp' := Hp; rewrite -(cycle_rot i) (Dp) (cycle_path x) /= in Hp'.
-case/andP: Hp'; clear; move/fpathP=> [m Dq].
-by rewrite /orbit order_cycle -(size_rot i) Dp /= -Dq size_traject.
+case/andP: Hp'=> _; move/fpathP=> [m Dq].
+by rewrite /orbit order_cycle -(size_rot i) Dp /= Dq size_traject.
 Qed.
 
 End Loop.
 
 Hypothesis Hf : injective f.
 
-Lemma f_finv : monic finv f.
+Lemma f_finv : cancel finv f.
 Proof.
 move=> x; move: (looping_order x) (uniq_orbit x).
 rewrite /looping /orbit -orderSpred looping_uniq /= /looping.
-set n := pred (order x); case/setU1P; first done.
-move/trajectP=> [i Hi Dnx]; rewrite iter_f -f_iter in Dnx.
+set n := (order x).-1; case/predU1P; first done.
+move/trajectP=> [i Hi Dnx]; rewrite -iterSr -iterS in Dnx.
 by case/trajectP; exists i; last by apply Hf.
 Qed.
 
-Lemma finv_f : monic f finv.
-Proof. exact (inj_monic_sym f_finv Hf). Qed.
+Lemma finv_f : cancel f finv.
+Proof. exact (inj_can_sym f_finv Hf). Qed.
 
-Lemma isoF : iso f.
+Lemma isoF : bijective f.
 Proof. exists finv; [ exact finv_f | exact f_finv ]. Qed.
 
-Lemma finv_iso : iso finv.
+Lemma finv_iso : bijective finv.
 Proof. exists f; [ exact f_finv | exact finv_f ]. Qed.
 
 Lemma finv_inj : injective finv.
-Proof. exact (monic_inj f_finv). Qed.
+Proof. exact (can_inj f_finv). Qed.
 
 Lemma fconnect_sym : forall x y, fconnect f x y = fconnect f y x.
 Proof.
@@ -501,7 +505,7 @@ Qed.
 Lemma fcard_finv : fcard finv =1 fcard f.
 Proof. exact (eq_n_comp same_fconnect_finv). Qed.
 
-Definition order_set n : set d := fun x => order x =d n.
+Definition order_set n : pred d := fun x => order x =d n.
 
 Lemma order_div_card : forall n a,
     subset a (order_set n) -> fclosed f a -> 0 < n ->
@@ -603,7 +607,7 @@ Section RelAdjunction.
 Variables (d d' : finSet) (h : d' -> d) (e : rel d) (e' : rel d').
 Hypotheses (He : connect_sym e) (He' : connect_sym e').
 
-Variable a : set d.
+Variable a : pred d.
 Hypothesis Ha : closed e a.
 
 Record rel_adjunction : Set := RelAdjunction
