@@ -7,6 +7,9 @@ Require Import seq.
 Require Import path.
 Require Import fintype.
 
+Set Implicit Arguments.
+Unset Strict Implicit.
+Import Prenex Implicits.
 
 Section FiniteSet.
 
@@ -23,3 +26,12 @@ by move=> b a; apply: etrans _ (add0n _); rewrite -cardUI addnC -(@card0 d);
 Qed.
 
 End FiniteSet.
+
+Lemma iso_eq_card : forall (d d' : finType) (a : pred d) (a' : pred d'),
+ (exists f : {x | x \in a} -> {x | x \in a'}, bijective f) -> #|a| = #|a'|.
+Proof.
+move=> d d' a a' [f [g Hf Hg]]; rewrite -(card_sig a) -(card_sig a').
+by apply/eqP; rewrite eqn_leq -{1}(card_codom (can_inj Hf)) -{2}(card_codom (can_inj Hg)) !max_card.
+Qed.
+
+
