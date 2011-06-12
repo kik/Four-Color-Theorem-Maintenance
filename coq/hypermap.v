@@ -1,12 +1,5 @@
 (* (c) Copyright Microsoft Corporation and Inria. All rights reserved. *)
-Require Import ssreflect.
-Require Import ssrbool.
-Require Import funs.
-Require Import dataset.
-Require Import ssrnat.
-Require Import seq.
-Require Import finset.
-Require Import paths.
+Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq fintype path.
 Require Import connect.
 
 Set Implicit Arguments.
@@ -46,15 +39,15 @@ Import Prenex Implicits.
 (* because the coercion of a bool to Prop is not a good coercion target      *)
 (* (all such assumptions are in the class is_true!).                         *)
 
-Notation "'monic3' f g h" := (monic f (fun x => g (h x)))
+Notation "'monic3' f g h" := (cancel f (fun x => g (h x)))
   (at level 10, f, g, h at level 8).
 
 Notation "@ 'monic3' d f g h" :=
-  (monic (A := d) (B := d) f (fun x : d => g (h x : d)))
+  (cancel (rT := d) (aT := d) f (fun x : d => g (h x : d)))
   (at level 10, d, f, g, h at level 8, format "'@' 'monic3'  d  f  g  h").
 
 Record hypermap : Type := Hypermap {
-  dart :> finSet;
+  dart :> finType;
   edge : dart -> dart;
   node : dart -> dart;
   face : dart -> dart;
@@ -79,9 +72,9 @@ Proof. exact (monicF_sym (Eedge g)). Qed.
 Lemma Enode : @monic3 g node face edge.
 Proof. exact (monicF_sym Eface). Qed.
 
-Lemma Iedge : @injective g g edge. Proof. exact (monic_inj (Eedge g)). Qed.
-Lemma Inode : @injective g g node. Proof. exact (monic_inj Enode). Qed.
-Lemma Iface : @injective g g face. Proof. exact (monic_inj Eface). Qed.
+Lemma Iedge : @injective g g edge. Proof. exact (can_inj (Eedge g)). Qed.
+Lemma Inode : @injective g g node. Proof. exact (can_inj Enode). Qed.
+Lemma Iface : @injective g g face. Proof. exact (can_inj Eface). Qed.
 
 Lemma Sedge : forall x y : g, cedge x y = cedge y x.
 Proof. exact (fconnect_sym Iedge). Qed.
@@ -97,7 +90,7 @@ Proof. exact (same_connect Snode). Qed.
 Lemma same_cface : forall x y : g, cface x y -> cface x =1 cface y.
 Proof. exact (same_connect Sface). Qed.
 
-Lemma cedge1 : forall x : g, cedge x =1 cedge (edge x).
+Lemma cedge1 : forall x : g, cedge x =i cedge (edge x).
 Proof. exact (same_fconnect1 Iedge). Qed.
 Lemma cedge1r : forall y x : g, cedge x y = cedge x (edge y).
 Proof. exact (fun y x => same_fconnect1_r Iedge x y). Qed.
@@ -116,9 +109,9 @@ End FiniteMap.
 
 Implicit Arguments Enode [].
 Implicit Arguments Eface [].
-Implicit Arguments Iedge [x x'].
-Implicit Arguments Inode [x x'].
-Implicit Arguments Iface [x x'].
+Implicit Arguments Iedge [].
+Implicit Arguments Inode [].
+Implicit Arguments Iface [].
 Implicit Arguments Sedge [].
 Implicit Arguments Snode [].
 Implicit Arguments Sface [].
@@ -127,16 +120,16 @@ Section Components.
 
 Variable g : hypermap.
 
-Definition glink : rel g := relU (eqdf edge) (relU (eqdf node) (eqdf face)).
+Definition glink : rel g := relU (frel edge) (relU (frel node) (frel face)).
 
 Lemma glinkE : forall x : g, glink x (edge x).
-Proof. by move=> *; rewrite /glink /relU /setU /eqdf set11. Qed.
+Proof. by move=> *; rewrite /glink /relU /predU /frel /= eqxx. Qed.
 
 Lemma glinkN : forall x : g, glink x (node x).
-Proof. by move=> *; rewrite /glink /relU /setU /eqdf set11 !orbT. Qed.
+Proof. by move=> *; rewrite /glink /relU /predU /frel /= eqxx !orbT. Qed.
 
 Lemma glinkF : forall x : g, glink x (face x).
-Proof. by move=> *; rewrite /glink /relU /setU /eqdf set11 !orbT. Qed.
+Proof. by move=> *; rewrite /glink /relU /predU /frel /= eqxx !orbT. Qed.
 
 Lemma Sglink : connect_sym glink.
 Proof.
@@ -144,8 +137,8 @@ apply: relU_sym; first by exact (Sedge _).
 apply: relU_sym; [ exact (Snode _) | exact (Sface _) ].
 Qed.
 
-Definition connectedb : bool := n_comp glink g =d 1.
-Definition connected : Prop := n_comp glink g =d 1.
+Definition connectedb : bool := n_comp glink g == 1.
+Definition connected : Prop := n_comp glink g == 1.
 
 End Components.
 
@@ -159,7 +152,7 @@ Section Genus.
 
 Variable g : hypermap.
 
-Definition genus_lhs := double (n_comp glink g) + card g.
+Definition genus_lhs := double (n_comp glink g) + #|g|.
 
 Definition genus_rhs := fcard edge g + (fcard node g + fcard face g).
 
@@ -167,8 +160,8 @@ Definition genus := half (genus_lhs - genus_rhs).
 
 Definition even_genus : Prop := genus_lhs = double genus + genus_rhs.
 
-Definition planarb : bool := genus =d 0.
-Definition planar : Prop := genus =d 0.
+Definition planarb : bool := genus == 0.
+Definition planar : Prop := genus == 0.
 
 End Genus.
 
@@ -176,13 +169,13 @@ Section Jordan.
 
 Variable g : hypermap.
 
-Definition clink : rel g := relU (eqdf (finv node)) (eqdf face).
+Definition clink : rel g := relU (frel (finv node)) (frel face).
 
 Lemma clinkPx : forall x y, reflect (x = node y \/ face x = y) (clink x y).
 Proof.
-move=> x y; apply: (iffP orP); rewrite /eqdf.
+move=> x y; apply: (iffP orP); rewrite /frel.
   case; move/eqP=> <-; rewrite ?(f_finv (Inode g)); auto.
-case=> ->; rewrite ?(finv_f (Inode g)) eqd_refl; auto.
+case=> /= ->; rewrite ?(finv_f (Inode g)) eq_refl; auto.
 Qed.
 
 Notation clinkP := (clinkPx _ _).
@@ -205,7 +198,7 @@ split; apply/subsetP; move: x; apply: connect_sub => [x y Hy].
   case/clinkP: Hy => [Hy|Hy].
     rewrite Sglink Hy; exact (connect1 (glinkN _)).
   rewrite -Hy; exact (connect1 (glinkF _)).
-case/setU1P: Hy => [Dy|Hy].
+case/predU1P: Hy => [Dy|Hy].
   rewrite -[x]Eedge Dy; apply: (connect_trans (connect1 (clinkN _))).
   rewrite Sclink; exact (connect1 (clinkF _)).
 case/orP: Hy; case/eqP=> <-; first by rewrite Sclink; exact (connect1 (clinkN _)).
@@ -218,40 +211,40 @@ Proof.
 move=> Hcg x y; apply: connectP; rewrite clink_glink.
 apply/(rootP (Sglink _)); set rx := root glink x; set ry := root glink y.
 rewrite /connected /n_comp (cardD1 rx) (cardD1 ry) in Hcg.
-rewrite /setI /setD1 {1}/rx {2}/ry !(roots_root (Sglink g)) /setA /= andbT in Hcg.
-by case: (rx =P ry) Hcg.
+rewrite /predI /predD1 /= !inE {1}/rx {2}/ry !(roots_root (Sglink g)) /predT andbT in Hcg.
+by case: (ry =P rx) Hcg.
 Qed.
 
 Definition moebius p :=
-  if p is Adds x p' then
-    (and3b (mem2 p' (finv node (last x p')) (node x)) (uniq p) (path clink x p'))
+  if p is cons x p' then
+    [&& (mem2 p' (finv node (last x p')) (node x)), (uniq p) & (path clink x p')]
   else false.
 
 Definition jordan := forall p, moebius p = false.
 
 Lemma jordan_face : jordan -> forall x p,
- (and3b (mem2 p (face (last x p)) (finv face x))
-        (uniq (Adds x p))
-        (path clink x p)) = false.
+ [&& (mem2 p (face (last x p)) (finv face x)),
+     (uniq (cons x p))
+   & (path clink x p)] = false.
 Proof.
 move=> Hj x p; apply/and3P; move Dy: (last x p) => y [Hxy Up Hp].
 case/splitP2r: p / Hxy Up Hp Dy => [p1' p23 Hx].
-rewrite -cat_adds uniq_cat last_cat path_cat; set p1 := Adds x p1'.
+rewrite -cat_cons cat_uniq last_cat path_cat; set p1 := cons x p1'.
 move/and3P=> [Up1 Up123 Up23] /=; move/and3P=> [Hp1 Hfy Hp23] Dy.
 case/clinkP: Hfy => [Dnfy|Hfy];
  last by case/hasP: Up123;
-   exists y; [ rewrite -{2}Dy | rewrite -(Iface _ Hfy) ]; apply: mem_last.
+   exists y; [ rewrite -{1}Dy | rewrite -(Iface _ _ _ Hfy) ]; apply: mem_last.
 case/splitPl: p23 / Hx Up123 Up23 Hp23 Dy => [p2' p3 Dx].
-rewrite -cat_adds has_cat uniq_cat; set p2 := Adds (face y) p2'.
+rewrite -cat_cons has_cat cat_uniq; set p2 := cons (face y) p2'.
 move/norP=> [Up12 Up13]; move/and3P=> [Up2 Up23 Up3].
 rewrite path_cat last_cat (Dx); case Dp3: p3 => [|feenx p3'] /=.
-  by move=> _ Dy; rewrite /p1 /p2 -Dy /= (f_finv (Iface g)) setU11 in Up12.
+  by move=> _ Dy; rewrite /p1 /p2 -Dy /= (f_finv (Iface g)) inE eqxx in Up12.
 move/and3P=> [Hp2 Hx Hp3] Dy; case/clinkP: Hx => [Dfeenx|Hfx];
-  last by rewrite /p1 Dp3 -Hfx /= (f_finv (Iface g)) setU11 in Up13.
-case/and3P: (Hj (Adds feenx (cat p3' (cat p2 p1)))); split.
-- rewrite !last_cat Dy /= Dnfy (finv_f (Inode g)) mem2_cat mem2_adds set11.
-  by rewrite -Dfeenx -mem_adds -cat_adds mem_cat /setU -Dx mem_last /= orbT.
-- rewrite -cat_adds -Dp3 !uniq_cat has_cat negb_orb.
+  last by rewrite /p1 Dp3 -Hfx /= (f_finv (Iface g)) inE eqxx in Up13.
+case/and3P: (Hj (cons feenx (cat p3' (cat p2 p1)))); split.
+- rewrite !last_cat Dy /= Dnfy (finv_f (Inode g)) mem2_cat mem2_cons eqxx.
+  by rewrite -Dfeenx /= -in_cons -cat_cons mem_cat /predU -Dx mem_last /= orbT.
+- rewrite -cat_cons -Dp3 !cat_uniq has_cat negb_orb.
   by rewrite Up3 has_sym Up23 has_sym Up13 has_sym Up12 Up2.
 rewrite !path_cat Dy /(p1) /(p2) /= Dx.
 by rewrite -{2}(f_finv (Iface g) x) !clinkF Hp3 Hp2.
@@ -274,7 +267,7 @@ Variable g : hypermap.
 Definition permN := Hypermap (Enode g : monic3 node face edge).
 
 Remark gcomp_permN : (gcomp : rel permN) =2 (gcomp : rel g).
-Proof. by apply: eq_connect => [x y]; rewrite /glink /relU /setU orbA orbC. Qed.
+Proof. by apply: eq_connect => [x y]; rewrite /glink /relU /predU /= orbA orbC. Qed.
 
 Lemma connected_permN : connected permN = connected g.
 Proof. by rewrite /connected (eq_n_comp gcomp_permN). Qed.
@@ -292,7 +285,7 @@ Proof. by rewrite /planar genus_permN. Qed.
 Definition permF := Hypermap (Eface g : monic3 face edge node).
 
 Remark gcomp_permF : (gcomp : rel permF) =2 (gcomp : rel g).
-Proof. by apply: eq_connect => [x y]; rewrite /glink /relU /setU orbC orbA. Qed.
+Proof. by apply: eq_connect => [x y]; rewrite /glink /relU /predU /= orbC orbA. Qed.
 
 Lemma connected_permF : connected permF = connected g.
 Proof. by rewrite /connected (eq_n_comp gcomp_permF). Qed.
@@ -318,7 +311,7 @@ Definition dual : hypermap := Hypermap hmap_dualP.
 Remark gcomp_dual : (gcomp : rel dual) =2 (gcomp : rel g).
 Proof.
 move=> x y; rewrite -!clink_glink; apply: {x y}eq_connect => x y.
-by rewrite /clink /relU /setU /eqdf /= (finv_inv (Iface g)) orbC.
+by rewrite /clink /relU /predU /frel /= (finv_inv (Iface g)) orbC.
 Qed.
 
 Lemma connected_dual : connected dual = connected g.
@@ -352,25 +345,25 @@ Proof. exact (same_fconnect_finv (Iface g)). Qed.
 Remark mirror_edge_adj : @fun_adjunction mirror g face edge (finv edge) g.
 Proof.
 apply: strict_adjunction=> //; try apply: Iface; try exact (Sedge dual).
-  by apply/subsetP => [x _]; rewrite -(Enode g x) codom_f.
+  by apply/subsetP => [x _]; rewrite -(Enode g x); apply: codom_f.
 move=> x y _ /=.
-by rewrite /eqdf /comp (inj_eqd (Iface g)) (finv_eq_monic (Eedge g)).
+by rewrite /frel /comp (inj_eq (Iface g)) (finv_eq_monic (Eedge g)).
 Qed.
 
 Lemma order_mirror_edge : forall x : g, @order mirror edge x = order edge (node x).
 Proof.
 move=> x; move: mirror_edge_adj => [_ De'].
 apply: (etrans _ (card_image (Iface g) _)); apply: eq_card => [y].
-rewrite cedge1 {2}/edge {4}/mirror /comp -(Enode g y) (image_f (Iface g)).
+rewrite cedge1 {2}/edge {4}/mirror /comp -(Enode g y) /in_mem /= (image_f _ (Iface g)).
 by rewrite -De' // (same_fconnect_finv (Iedge g)).
 Qed.
 
 Lemma gcomp_mirror : (gcomp : rel mirror) =2 (gcomp : rel g).
 Proof.
 move=> x y; rewrite -!clink_glink (same_connect_rev (Sclink g)).
-apply: {x y}eq_connect => [x y]; rewrite /clink /relU /setU /eqdf /=.
-rewrite (monic2F_eqd (f_finv (finv_inj (Inode g)))) eqd_sym; congr orb.
-by rewrite (monic2F_eqd (f_finv (Iface g))) eqd_sym.
+apply: {x y}eq_connect => [x y]; rewrite /clink /relU /predU /frel /=.
+rewrite (monic2F_eqd (f_finv (finv_inj (Inode g)))) eq_sym; congr orb.
+by rewrite (monic2F_eqd (f_finv (Iface g))) eq_sym.
 Qed.
 
 Lemma connected_mirror : connected mirror = connected g.
@@ -405,7 +398,7 @@ Hypothesis Hg' : eqm g'.
 Remark eqm_gcomp : n_comp glink g = n_comp glink g'.
 Proof.
 case: Hg' => [e n f Eenf Ee En Ef]; apply: eq_n_comp.
-by apply: eq_connect => [x y]; rewrite {1}/glink /relU /setU /eqdf Ee En Ef.
+by apply: eq_connect => [x y]; rewrite {1}/glink /relU /predU /frel /= Ee En Ef.
 Qed.
 
 Lemma eqm_connected : connected g = connected g'.
