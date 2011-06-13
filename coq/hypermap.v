@@ -1,6 +1,5 @@
 (* (c) Copyright Microsoft Corporation and Inria. All rights reserved. *)
-Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq fintype path.
-Require Import connect.
+Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq fintype path fingraph.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -39,19 +38,19 @@ Import Prenex Implicits.
 (* because the coercion of a bool to Prop is not a good coercion target      *)
 (* (all such assumptions are in the class is_true!).                         *)
 
-Notation "'monic3' f g h" := (cancel f (fun x => g (h x)))
+Notation "'cancel3' f g h" := (cancel f (fun x => g (h x)))
   (at level 10, f, g, h at level 8).
 
-Notation "@ 'monic3' d f g h" :=
+Notation "@ 'cancel3' d f g h" :=
   (cancel (rT := d) (aT := d) f (fun x : d => g (h x : d)))
-  (at level 10, d, f, g, h at level 8, format "'@' 'monic3'  d  f  g  h").
+  (at level 10, d, f, g, h at level 8, format "'@' 'cancel3'  d  f  g  h").
 
 Record hypermap : Type := Hypermap {
   dart :> finType;
   edge : dart -> dart;
   node : dart -> dart;
   face : dart -> dart;
-  Eedge : monic3 edge node face
+  Eedge : cancel3 edge node face
 }.
 
 Implicit Arguments Eedge [].
@@ -66,11 +65,11 @@ Section FiniteMap.
 
 Variable g : hypermap.
 
-Lemma Eface : @monic3 g face edge node.
-Proof. exact (monicF_sym (Eedge g)). Qed.
+Lemma Eface : @cancel3 g face edge node.
+Proof. exact (canF_sym (Eedge g)). Qed.
 
-Lemma Enode : @monic3 g node face edge.
-Proof. exact (monicF_sym Eface). Qed.
+Lemma Enode : @cancel3 g node face edge.
+Proof. exact (canF_sym Eface). Qed.
 
 Lemma Iedge : @injective g g edge. Proof. exact (can_inj (Eedge g)). Qed.
 Lemma Inode : @injective g g node. Proof. exact (can_inj Enode). Qed.
@@ -206,7 +205,7 @@ exact (connect1 (clinkF _)).
 Qed.
 
 Lemma connected_clink : connected g -> forall x y : g,
-  exists2 p, path clink x p & last x p = y.
+  exists2 p, path clink x p & y = last x p.
 Proof.
 move=> Hcg x y; apply: connectP; rewrite clink_glink.
 apply/(rootP (Sglink _)); set rx := root glink x; set ry := root glink y.
@@ -264,7 +263,7 @@ Variable g : hypermap.
 
 (* Left permutation (edge -> node) *)
 
-Definition permN := Hypermap (Enode g : monic3 node face edge).
+Definition permN := Hypermap (Enode g : cancel3 node face edge).
 
 Remark gcomp_permN : (gcomp : rel permN) =2 (gcomp : rel g).
 Proof. by apply: eq_connect => [x y]; rewrite /glink /relU /predU /= orbA orbC. Qed.
@@ -282,7 +281,7 @@ Proof. by rewrite /planar genus_permN. Qed.
 
 (* Right permutation (edge -> face) *)
 
-Definition permF := Hypermap (Eface g : monic3 face edge node).
+Definition permF := Hypermap (Eface g : cancel3 face edge node).
 
 Remark gcomp_permF : (gcomp : rel permF) =2 (gcomp : rel g).
 Proof. by apply: eq_connect => [x y]; rewrite /glink /relU /predU /= orbC orbA. Qed.
@@ -298,7 +297,7 @@ Qed.
 Lemma planar_permF : planar permF = planar g.
 Proof. by rewrite /planar genus_permF. Qed.
 
-Remark hmap_dualP : @monic3 g (finv edge) (finv face) (finv node).
+Remark hmap_dualP : @cancel3 g (finv edge) (finv face) (finv node).
 Proof.
 move=> x; rewrite -{1}[x]Eface (finv_f (Iedge g)) (finv_f (Inode g)).
 exact (finv_f (Iface g) x).
@@ -329,7 +328,7 @@ Proof. by rewrite /planar genus_dual. Qed.
 
 (* Mirror: invert node and face in place, garble edge *)
 
-Remark hmap_mirrorP : @monic3 g (comp face node) (finv node) (finv face).
+Remark hmap_mirrorP : @cancel3 g (comp face node) (finv node) (finv face).
 Proof.
 move=> x; rewrite /comp (finv_f (Iface g)); exact (finv_f (Inode g) x).
 Qed.
@@ -347,7 +346,7 @@ Proof.
 apply: strict_adjunction=> //; try apply: Iface; try exact (Sedge dual).
   by apply/subsetP => [x _]; rewrite -(Enode g x); apply: codom_f.
 move=> x y _ /=.
-by rewrite /frel /comp (inj_eq (Iface g)) (finv_eq_monic (Eedge g)).
+by rewrite /frel /comp (inj_eq (Iface g)) (finv_eq_can (Eedge g)).
 Qed.
 
 Lemma order_mirror_edge : forall x : g, @order mirror edge x = order edge (node x).
@@ -362,8 +361,8 @@ Lemma gcomp_mirror : (gcomp : rel mirror) =2 (gcomp : rel g).
 Proof.
 move=> x y; rewrite -!clink_glink (same_connect_rev (Sclink g)).
 apply: {x y}eq_connect => [x y]; rewrite /clink /relU /predU /frel /=.
-rewrite (monic2F_eqd (f_finv (finv_inj (Inode g)))) eq_sym; congr orb.
-by rewrite (monic2F_eqd (f_finv (Iface g))) eq_sym.
+rewrite (canF_eq (f_finv (finv_inj (Inode g)))) eq_sym; congr orb.
+by rewrite (canF_eq (f_finv (Iface g))) eq_sym.
 Qed.
 
 Lemma connected_mirror : connected mirror = connected g.
@@ -389,7 +388,7 @@ Section EqualHypermap.
 Variable g : hypermap.
 
 Inductive eqm : hypermap -> Prop :=
-    EqHypermap : forall (e n f : g -> g) (Eenf : monic3 e n f),
+    EqHypermap : forall (e n f : g -> g) (Eenf : cancel3 e n f),
       edge =1 e -> node =1 n -> face =1 f -> eqm (Hypermap Eenf).
 
 Variable g' : hypermap.
