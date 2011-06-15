@@ -1,6 +1,5 @@
 (* (c) Copyright Microsoft Corporation and Inria. All rights reserved. *)
-Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq fintype path.
-Require Import connect.
+Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq fintype path fingraph.
 Require Import hypermap.
 
 Set Implicit Arguments.
@@ -24,8 +23,8 @@ Let d' := {x | x \in (predC1 z)}.
 Let to_d' : forall x, x \in predC1 z -> d' := @exist _ _.
 Let to_g : d' -> g := sval.
 
-Remark z_to_g : forall u, (z == to_g u) = false.
-Proof. by move=> [x Hx] /=; rewrite /predC1 inE /= eq_sym in Hx; apply negbTE. Qed.
+Remark z_to_g : forall u, (to_g u == z) = false.
+Proof. by move=> [x Hx] /=; rewrite /predC1 inE /= in Hx; apply negbTE. Qed.
 
 Remark to_g_inj : injective to_g. Proof. apply: val_inj. Qed.
 
@@ -34,13 +33,13 @@ Section Skip.
 Variable f : g -> g.
 Hypothesis Hf : injective f.
 
-Definition skip1 x := if z == f x then f z else f x.
+Definition skip1 x := if f x == z then f z else f x.
 
 Lemma skipP : forall u, skip1 (to_g u) \in predC1 z.
 Proof.
 move=> [x Hx]; rewrite /skip1 /predC1 /=.
-case Hfx: (z == (f x)); last by rewrite inE /= eq_sym Hfx.
-by apply/eqP => [Dfz]; case/idP: Hx; rewrite /predC1 inE /= -(inj_eq Hf) Dfz eq_sym Hfx.
+case Hfx: (f x == z); last by rewrite inE /= Hfx.
+by apply/eqP => [Dfz]; case/idP: Hx; rewrite /predC1 inE /= -(inj_eq Hf) Dfz Hfx.
 Qed.
 
 Definition skip u := to_d' (skipP u).
@@ -48,54 +47,54 @@ Definition skip u := to_d' (skipP u).
 Remark inj_skip : injective skip.
 Proof.
 move=> [x Hx] [y Hy] [Hxy]; apply: to_g_inj; move: Hxy; rewrite /= /skip1.
-case: (z =P f x) => [Dfx|_].
-  rewrite {2}Dfx (inj_eq Hf); case: (x =P y) => [H|_] //.
+case: (f x =P z) => [Dfx|_].
+  rewrite -{2}Dfx (inj_eq Hf); case: (y =P x) => [H|_] //.
   by move=> Dy; rewrite (Hf Dy) inE /= eqxx in Hy.
-case (z == (f y)); last by apply Hf.
+case (f y == z); last by apply Hf.
 by move=> Dx; rewrite (Hf Dx) inE /= eqxx in Hx.
 Qed.
 
 Lemma subdE_skip : forall u v, to_g v = f (to_g u) -> v = skip u.
 Proof.
 move=> [x Hx] [y Hy] /= Dy; apply: to_g_inj.
-by rewrite /= /skip1 -Dy /= eq_sym (negbTE Hy).
+by rewrite /= /skip1 -Dy /= (negbTE Hy).
 Qed.
 
 Lemma base_skip : fun_base to_g f skip (pred1 (finv f z)).
 Proof.
-move=> [x Hx] y'. rewrite /frel /= -(inj_eq val_inj) /= /skip1.
-by rewrite eq_sym (monic2F_eqd (f_finv Hf)); move/negbTE=> ->.
+move=> [x Hx] y'; rewrite /frel /= {3}/eq_op /= /skip1.
+by rewrite -(canF_eq (finv_f Hf)); move/negbTE=> ->.
 Qed.
 
 Lemma fconnect_skip : forall u v, fconnect skip u v = fconnect f (to_g u) (to_g v).
 Proof.
 move=> u v; apply/idP/idP; move/connectP=> [p Hp Ep].
-  rewrite -{v}Ep; elim: p u Hp => [|v p Hrec] u; first by rewrite connect0.
+  rewrite {v}Ep; elim: p u Hp => [|v p Hrec] u; first by rewrite connect0.
   move/andP=> [Dv H]; apply: connect_trans {H Hrec}(Hrec _ H).
   rewrite {2}/to_g -{v Dv}(eqP Dv); move: u => [x Hx]; rewrite /= /skip1.
-  case: (z =P f x) => [Dfx|_]; last by apply fconnect1.
-  rewrite Dfx; exact (fconnect_iter f 2 x).
+  case: (f x =P z) => [Dfx|_]; last by apply fconnect1.
+  rewrite -Dfx; exact (fconnect_iter f 2 x).
 elim: {p}(S (size p)) {-2}p u (ltnSn (size p)) Hp Ep => [|n Hrec] // [|y p] u /=.
   by move=> _ _ Dv; apply eq_connect0; apply: to_g_inj.
 move=> Hn; move/andP=> [Dy Hp] Ep.
 case Hy: (predC1 z y).
   apply: (connect_trans (connect1 _) (Hrec p (to_d' Hy) Hn Hp Ep)).
-  by rewrite /frel /= -(inj_eq val_inj) /= /skip1 (eqP Dy) [z==y]eq_sym (negbTE Hy) eqxx.
-case: p Hn Hp Ep => [|fy p] Hn /= Hp Ep; first by rewrite /predC1 Ep /= eq_sym z_to_g in Hy.
+  by rewrite /frel /eq_op /= /skip1 (eqP Dy) (negbTE Hy) eqxx.
+case: p Hn Hp Ep => [|fy p] Hn /= Hp Ep; first by rewrite /predC1 -Ep /= z_to_g in Hy.
 have Hfy: predC1 z (f y).
   rewrite /predC1 /= in Hy.
   rewrite /predC1 -(eqP (negbFE Hy)) -{1}(eqP Dy) /= (inj_eq Hf).
-  by rewrite (eqP (negbFE Hy)) z_to_g.
+  by rewrite (eqP (negbFE Hy)) eq_sym z_to_g.
 move/andP: Hp => [Dfy Hp]; rewrite (eqP Dfy) in Hfy.
 apply: (connect_trans (connect1 _) (Hrec p (to_d' Hfy) (ltnW Hn) Hp Ep)).
-by rewrite /frel /= -(inj_eq val_inj) /= /skip1 (eqP Dy) -(eqP Dfy) (eqP (negbFE Hy)) eqxx.
+by rewrite /frel /eq_op /= /skip1 (eqP Dy) -(eqP Dfy) (eqP (negbFE Hy)) eqxx.
 Qed.
 
-Lemma fcard_skip : (z == f z) + fcard skip {: d'} = fcard f g.
+Lemma fcard_skip : (f z == z) + fcard skip {: d'} = fcard f g.
 Proof.
 have Hfg := fconnect_sym Hf; have Hsf := fconnect_sym inj_skip.
 pose a := fconnect f z.
-have Ha: fclosed f (predC a) by apply setC_closed; apply: connect_closed.
+have Ha: fclosed f (predC a) by apply predC_closed; apply: connect_closed.
 have Haf: fun_adjunction to_g f skip (predC a).
   apply: (strict_adjunction Hsf Ha to_g_inj).
   apply/subsetP => [x Hax]; case Hx: (x == z).
@@ -105,10 +104,9 @@ have Haf: fun_adjunction to_g f skip (predC a).
   by rewrite Du /predC /(a) inE /=  fconnect_finv in Hu.
 rewrite (n_compC a) (n_compC (preim to_g a)) {3}/a (n_comp_connect Hfg).
 rewrite (adjunction_n_comp _ Hfg Hsf Ha Haf) addnA; congr addn.
-rewrite eq_sym.
 case Hfz: (f z == z).
   apply: eqP; apply/pred0P => [[x Hx]]; apply/andP => [[_ Hzx]].
-  rewrite /preim /= in Hzx; case/eqP: Hx; move/connectP: Hzx => [p Hp <-] {x}.
+  rewrite /preim /= in Hzx; case/eqP: Hx; move/connectP: Hzx => [p Hp ->] {x}.
   elim: p (z) (eqP Hfz) Hp => [|y p Hrec] x //= Dx; case/andP; case/eqP=> <-.
   rewrite Dx; exact: Hrec Dx.
 apply: etrans (n_comp_connect Hsf (to_d' (negbT Hfz))); apply: eq_n_comp_r.
@@ -117,48 +115,48 @@ move=> u; apply/idP/idP => Hu.
   rewrite Hsf; elim: p u Hp Dz => [|x p Hrec] u /=.
     by move=> _ Dz; case/eqP: (z_to_g u); rewrite -Dz.
   case/andP; move/eqP=> Hx Hp Dz; case Hv: (x == z).
-    by apply connect1; rewrite /frel /= -(inj_eq val_inj) /= /skip1 Hx eq_sym [z==x]eq_sym Hv eqxx.
+    by apply connect1; rewrite /frel /eq_op /= /skip1 Hx eq_sym Hv eqxx.
   apply: (connect_trans (connect1 _) (Hrec (to_d' (negbT Hv)) Hp Dz)).
-   by rewrite /frel /= -(inj_eq val_inj) /= /skip1 Hx [z==x]eq_sym Hv eqxx.
+   by rewrite /frel /eq_op /= /skip1 Hx Hv eqxx.
 rewrite Hsf in Hu; move/connectP: Hu => [p Hp Dfz].
 elim: p u Hp Dfz => [|v p Hrec] u /=.
-  by move=> _ Du; rewrite Du /preim /= /a fconnect1.
+  by move=> _ Du; rewrite -Du /preim /= /a fconnect1.
 move/andP=> [Huv Hp] Dfz; move: u Huv => [x Hx].
-rewrite /frel -(inj_eq val_inj) /= -/to_g /skip1.
-case: (z =P f x) => [Dz|_] Dfx.
-  by rewrite /preim /a /= Dz Hfg fconnect1.
+rewrite /frel /eq_op /= -/to_g /skip1.
+case: (f x =P z) => [Dz|_] Dfx.
+  by rewrite /preim /a /= -Dz Hfg fconnect1.
 by apply: (connect_trans (Hrec _ Hp Dfz)); rewrite Hfg; apply connect1.
 Qed.
 
 End Skip.
 
 Definition skip_edge1 x :=
-  if z == edge z then edge x else
-  if z == face (edge x) then edge z else
-  if z == edge x then edge (node z) else edge x.
+  if edge z == z then edge x else
+  if face (edge x) == z then edge z else
+  if edge x == z then edge (node z) else edge x.
 
 Lemma skip_edgeP : forall u, predC1 z (skip_edge1 (to_g u)).
 Proof.
-move=> [x Hx]; rewrite /= /skip_edge1 /predC1; case Hez: (z == edge z).
-  by rewrite (eqP Hez) (inj_eq (Iedge g)).
-  case Hfex: (z == face (edge x)); first by rewrite eq_sym Hez.
-  case Hex: (z == edge x); last by rewrite eq_sym Hex.
-by rewrite -(inj_eq (Iface g)) {2}(eqP Hex) Enode Hfex.
+move=> [x Hx]; rewrite /= /skip_edge1 /predC1; case Hez: (edge z == z).
+  by rewrite -(eqP Hez) (inj_eq (Iedge g)).
+  case Hfex: (face (edge x) == z); first by rewrite Hez.
+  case Hex: (edge x == z); last by rewrite Hex.
+by rewrite -(inj_eq (Iface g)) -{2}(eqP Hex) Enode eq_sym Hfex.
 Qed.
 
 Definition skip_edge u := to_d' (skip_edgeP u).
 
-Lemma Eskip : monic3 skip_edge (skip (Inode g)) (skip (Iface g)).
+Lemma Eskip : cancel3 skip_edge (skip (Inode g)) (skip (Iface g)).
 Proof.
 move=> [x Hx]; apply: to_g_inj; rewrite /= /skip_edge1 /skip1.
-case Hez: (z == edge z).
-  case: (z =P face (edge x)) => [Dz|_]; last by rewrite Eedge [z==x]eq_sym (negbTE Hx).
-  by rewrite {2}(eqP Hez) Eedge eqxx Dz Eedge.
-case Hfex: (z == face (edge x)).
-  rewrite {2 6}(eqP Hfex) (inj_eq (Iface g)) (inj_eq (Iedge g)).
-  by rewrite (eq_sym x) [z==x]eq_sym (negbTE Hx) !Eedge eqxx.
-case Hex: (z == edge x); last by rewrite Hfex Eedge [z==x]eq_sym (negbTE Hx).
-by rewrite Enode eqxx {2 4}(eqP Hex) Eedge [z==x]eq_sym (negbTE Hx).
+case Hez: (edge z == z).
+  case: (face (edge x) =P z) => [Dz|_]; last by rewrite Eedge (negbTE Hx).
+  by rewrite -{1}(eqP Hez) Eedge eqxx -Dz Eedge.
+case Hfex: (face (edge x) == z).
+  rewrite -{2 6}(eqP Hfex) (inj_eq (Iface g)) (inj_eq (Iedge g)).
+  by rewrite -(eq_sym x) (negbTE Hx) !Eedge eqxx.
+case Hex: (edge x == z); last by rewrite Hfex Eedge (negbTE Hx).
+by rewrite Enode eqxx -{1 4}(eqP Hex) Eedge (negbTE Hx).
 Qed.
 
 Definition walkupE := Hypermap Eskip.
@@ -168,113 +166,119 @@ Notation Local g' := walkupE.
 Notation Local "'@' 'g'' H" := ((to_d' H) : g') (at level 10, H at level 8).
 Notation Local "'@' 'g'" := (to_g : g' -> g) (at level 10).
 
-Definition walkupI u x := if subdIopt (predC1 z) x is Some v then v : g' else u.
+Definition walkupI u (x : g) := if insub x is Some v then v : g' else u.
 
-Lemma walkupI_eq : forall u x, @g (walkupI u x) = (if z == x then @g u else x).
+Lemma walkupI_eq : forall u x, @g (walkupI u x) = (if x == z then @g u else x).
 Proof.
-move=> u x; rewrite /walkupI; case: (subdIoptP (predC1 z) x) => [v Hx Dv|Hx].
-  by rewrite (negbE Hx).
-by rewrite (negbE2 Hx).
+move=> u x; rewrite /walkupI; case: (insubP _ x) => [v Hx Dv|Hx].
+  by rewrite (negbTE Hx).
+by rewrite (negbNE Hx).
 Qed.
 
-Lemma walkup_seq : forall p : seq g, predC p z -> {q : seq g' | p = maps (@g) q}.
+Lemma walkup_seq : forall p : seq g, predC (mem p) z -> {q : seq g' | p = map (@g) q}.
 Proof.
-elim=> [|x p Hrec]; [ by exists (Seq0 walkupE) | rewrite /= /predU1 ].
-move/norP=> [Hx Hp]; rewrite eqd_sym in Hx.
-by case: (Hrec Hp) => [q Dp]; exists (Adds (@g' Hx) q); rewrite Dp.
+elim=> [|x p Hrec]; [ by exists nil | rewrite /= /predU1 ].
+move/norP=> [Hx Hp]; rewrite eq_sym in Hx.
+by case: (Hrec Hp) => [q Dp]; exists (cons (@g' Hx) q); rewrite Dp.
 Qed.
 
 Lemma not_glink_fp : negb (glink z z) ->
   and3 ((z == edge z) = false) ((z == node z) = false) ((z == face z) = false).
 Proof.
 case/norP; move=> Hez; move/norP=> [Hnz Hfz].
-by split; rewrite eqd_sym; apply negbE.
+by split; rewrite eq_sym; apply negbTE.
 Qed.
 
-Lemma base_skip_edge : fun_base (@g) edge edge (seq2 (node (face z)) (node z)).
+Lemma base_skip_edge : fun_base (@g) edge edge (mem [:: (node (face z)); (node z)]).
 Proof.
-move=> [x Hx] [y Hy]; rewrite /predC mem_seq2 /eqdf {2}/eqd /=.
-move/norP=> [Hex Hfex] .
-rewrite (monic2F_eqd (monicF_sym (Eedge g))) in Hex.
-rewrite (monic2F_eqd (Enode g)) in Hfex.
-by rewrite /skip_edge1 (negbE Hex) (negbE Hfex) if_same eqd_sym.
+move=> [x Hx] [y Hy]; rewrite /predC /= mem_seq2 /frel {4}/eq_op /=.
+move/norP=> [Hex Hfex].
+rewrite -(canF_eq (Eedge g)) in Hex.
+rewrite -(canF_eq (canF_sym (Enode g))) in Hfex.
+by rewrite /skip_edge1 (negbTE Hex) (negbTE Hfex) if_same.
 Qed.
 
 Lemma glink_fp_skip_edge : glink z z -> skip_edge =1 skip (Iedge g).
 Proof.
 move=> H [x Hx]; apply: to_g_inj; move: H.
-rewrite /glink /relU /predU /eqdf /= /skip1 /skip_edge1 eqd_sym.
-case: (z =P edge z) => [Dz|_].
-  by clear; rewrite Dz (inj_eqd (Iedge g)) (negbE Hx).
+rewrite /glink /relU /predU /frel /= /skip1 /skip_edge1.
+case: (edge z =P z) => [Dz|_].
+  by move=> _; rewrite -Dz (inj_eq (Iedge g)) (negbTE Hx).
 case: (node z =P z) => [Dnz|_] Dfz.
-  by rewrite -(monic2F_eqd (Enode g)) Dnz (negbE Hx).
-by rewrite -{1}(eqP Dfz) (inj_eqd (Iface g)); case (eqd z (edge x)).
+  by rewrite (canF_eq (canF_sym (Enode g))) Dnz (negbTE Hx).
+by rewrite -{1}(eqP Dfz) (inj_eq (Iface g)); case (edge x == z).
 Qed.
 
 Definition cross_edge := cedge z (node z).
 
-Let z_comp := closure clink (preimage (@g) (clink z)).
+Let z_comp := closure clink (mem (preim (@g) (clink z))).
 
-Let z_barb := subset (clink z) (pred1 z).
+Let z_barb := (clink z) \subset (pred1 z).
 
-Remark z_barb_z : z_barb = and3b (z == edge z) (z == node z) (z == face z).
+Remark z_barb_z : z_barb = [&& edge z == z, node z == z & face z == z].
 Proof.
 apply/subsetP/and3P => [Hbz|[_ Hnz Hfz] x].
   have Hfz := Hbz _ (clinkF _); rewrite -{1}[z]Eedge in Hbz.
   have Hfez := Hbz _ (clinkN _); split; auto.
-    by rewrite -(inj_eqd (Iface g)) -(eqP Hfz).
-  by rewrite {2}(eqP Hfez) Eedge eqxx.
-rewrite /clink /relU /predU /eqdf.
-by rewrite {1}(eqP Hnz) (finv_f (Inode g)) -(eqP Hfz) orbb.
+    by rewrite -(inj_eq (Iface g)) (eqP Hfz).
+  by rewrite -{1}(eqP Hfez) Eedge eqxx.
+rewrite /clink /relU /predU /frel /in_mem /=.
+by rewrite -{1}(eqP Hnz) (finv_f (Inode g)) (eqP Hfz) orbb eq_sym.
 Qed.
 
 Remark clink_at_g' : forall u v, clink (@g u) (@g v) -> clink u v.
 Proof.
 move=> [x Hx] [y Hy] /= Hxy; apply/clinkP; case/clinkP: Hxy => [Dx|Dy].
-  by left; apply to_g_inj; rewrite /= /skip1 -Dx (negbE Hx).
-by right; apply to_g_inj; rewrite /= /skip1 Dy (negbE Hy).
+  by left; apply to_g_inj; rewrite /= /skip1 -Dx (negbTE Hx).
+by right; apply to_g_inj; rewrite /= /skip1 Dy (negbTE Hy).
 Qed.
 
 Remark clink_at_g : forall u v, connect clink u v -> connect clink (@g u) (@g v).
 Proof.
-move=> u v; move/connectP=> [p Hp <-] {v}.
+move=> u v; move/connectP=> [p Hp ->] {v}.
 elim: p u Hp => [|v p Hrec] u /=; first by rewrite connect0.
 move/andP=> [Hu Hp]; apply: (connect_trans _ (Hrec _ Hp)).
 (case/clinkP: Hu; move/(congr1 to_g); rewrite /= /skip1) => [->|<-].
-  case Hnv: (z == node (@g v)); last by exact (connect1 (clinkN _)).
+  case Hnv: (node (@g v) == z); last by exact (connect1 (clinkN _)).
   apply: (connect_trans (connect1 (clinkN _))).
-  rewrite {1}(eqP Hnv); exact (connect1 (clinkN _)).
-case: (z =P face (@g u)) => [Dz|_];
+  rewrite -{1}(eqP Hnv); exact (connect1 (clinkN _)).
+case: (face (@g u) =P z) => [Dz|_];
  apply: (connect_trans (connect1 (clinkF _))); last by apply: connect0.
 rewrite Dz; exact (connect1 (clinkF _)).
 Qed.
 
-Remark z_comp_preimage : z_comp =1 preimage (@g) (connect clink z).
+Remark z_comp_preimage : z_comp =1 preim (@g) (mem (connect clink z)).
 Proof.
 move=> v; apply/pred0Pn/idP.
-  case; move=> u; case/andP; rewrite /preimage Sclink; move=> Huv Hu.
+  case; move=> u; case/andP; rewrite /preim inE; move=> Huv Hu.
+  rewrite /in_mem -[(mem _) _]/(connect clink v u) Sclink in Huv.
+  rewrite !inE in Hu. rewrite !inE /in_mem /=.
   exact (connect_trans (connect1 Hu) (clink_at_g Huv)).
 case/connectP=> p0; case/shortenP=> [] [|x p] /= Hp Up _ Dv {p0}.
   by case/eqP: (z_to_g v); rewrite -Dv.
-move/andP: Hp => [Hu Hp]; case/andP: Up; rewrite -mem_adds.
+move/andP: Hp => [Hu Hp]; case/andP: Up. rewrite inE -in_cons.
 case/walkup_seq; case=> [|x' p'] //= [Dx Dp] _.
-exists x'; rewrite /predI /preimage /= -(Dx) Hu andbT.
+exists x'; rewrite /predI /preim /= !inE -Dx Hu andbT.
 apply: (etrans (Sclink walkupE _ _)); apply/connectP.
-exists p'; last by rewrite Dx Dp last_maps in Dv; exact (to_g_inj Dv).
+exists p'; last by rewrite Dx Dp last_map in Dv; exact (to_g_inj Dv).
 apply/(pathP x') => [i Hi]; apply clink_at_g'.
-rewrite -!(sub_maps x' x) //; last by exact (leqW Hi).
-rewrite {1}[sub]lock /= -Dx -Dp -lock.
-by apply: ((pathP _) Hp); rewrite Dp size_maps.
+rewrite -!(nth_map x' x) //; last by exact (leqW Hi).
+rewrite {1}[nth]lock /= -Dx -Dp -lock.
+by apply: ((pathP _) Hp); rewrite Dp size_map.
 Qed.
 
 Remark z_barb_comp : z_barb = (n_comp clink z_comp == 0).
 Proof.
 apply/subsetP/pred0P => [Hbz u|Hcz x Hx].
-  apply/andP; case; clear; case/pred0Pn; move=> [x Hx]; move/andP=> [_ Hzx].
-  by rewrite /preimage /= in Hzx; rewrite /predC1 (Hbz _ Hzx) in Hx.
+  apply/andP; case=> _; case/pred0Pn; move=> [x Hx]; move/andP=> [_ Hzx].
+  rewrite /preim /= !inE /= in Hzx.
+  have Hz := Hbz _ Hzx; rewrite /pred1 inE /= in Hz.
+  by rewrite /predC1 inE /= Hz in Hx.
 apply/idPn => [Hv]; pose v := @g' Hv; pose u := root clink v.
-case/idP: (Hcz u); rewrite /predI {1}/u (roots_root (Sclink walkupE)).
-by apply/pred0Pn; exists v; rewrite /predI Sclink /u connect_root.
+case/idP: (Hcz u); rewrite /predI {1}/u /= (roots_root (Sclink walkupE)).
+apply/pred0Pn; exists v; rewrite /predI !inE /in_mem /=.
+rewrite -[connect _ _ _]/(connect clink (root clink v) v).
+by rewrite  Sclink /u connect_root.
 Qed.
 
 Let disconnected := 1 < n_comp clink z_comp.
@@ -285,20 +289,20 @@ Remark not_cross_edge_walkup : negb cross_edge -> forall u v,
  @g u = edge z -> @g v = node (face z) -> cedge u v.
 Proof.
 move=> Hznz u v Du Dv; case Hez: (z == edge z).
-  by case: u Du => [ez Hez'] Dez; rewrite -Dez /= (negbE Hez') in Hez.
+  by case: u Du => [ez Hez'] Dez; rewrite -Dez /= eq_sym (negbTE Hez') in Hez.
   case/connectP: (etrans (Sedge g _ _) (fconnect1 _ z)).
 move=> p0; case/shortenP=> [p Hp Up _ {p0}] Dz.
 elim/last_ind: p Dz Up Hp => [|p z'] Dz; first by case/eqP: Hez.
-rewrite last_add_last -cats1 -cat_adds uniq_cat path_cat /= !andbT orbF.
-move=> Dz'; rewrite {z'}Dz' /predU1 eqd_sym Hez /= -uniq_adds.
-rewrite {2}/eqdf (monic2F_eqd (Eedge g)) -Dv -Du.
+rewrite last_rcons -cats1 -cat_cons cat_uniq path_cat /= !andbT orbF.
+move=> Dz'. rewrite !inE /in_mem /= -{z'}Dz' /predU1 Hez /= -cons_uniq.
+rewrite {2}/frel (canF_eq (Eedge g)) -Dv -Du.
 move/andP=> [Up Hpz]; move/andP=> [Hp Ev].
 case: {Hpz}(walkup_seq Hpz) => [p' Dp]; apply/connectP.
-exists p'; last by rewrite Dp last_maps in Ev; exact (to_g_inj (eqP Ev)).
-rewrite -(@path_maps g _ _ _ _ _ _ _ base_skip_edge); first by rewrite Dp in Hp.
-simpl in Dp; rewrite -has_maps has_sym -belast_maps /= -Dp orbF -Dv.
+exists p'; last by rewrite Dp last_map in Ev; exact (esym (to_g_inj (eqP Ev))).
+rewrite -(@path_map g _ _ _ _ _ _ _ base_skip_edge); first by rewrite Dp in Hp.
+simpl in Dp; rewrite -has_map has_sym -belast_map /= -Dp orbF -Dv.
 apply/orP => [[Hpv|Hpnz]].
-  by rewrite lastI (eqP Ev) -cats1 uniq_cat /= Hpv andbC in Up.
+  by rewrite lastI (eqP Ev) -cats1 cat_uniq /= Hpv andbC in Up.
   case: (negP Hznz); apply: (connect_trans (fconnect1 edge z)).
 rewrite -Du; exact (path_connect Hp (mem_belast Hpnz)).
 Qed.
@@ -311,34 +315,36 @@ have Huw: forall u w, node (@g u) = z -> face z = @g w -> connect clink u w.
     apply eq_connect0; apply to_g_inj; apply Inode.
     by rewrite -Dw (eqP Hez) Eedge.
   case Hnz: (z == node z).
-    by rewrite -{1}Du (inj_eqd (Inode g)) eqd_sym z_to_g in Hnz.
-  case Hfz: (z == face z); first by rewrite Dw z_to_g in Hfz.
-  rewrite /glink /relU /predU /eqdf -!(eqd_sym z) Hez Hnz Hfz /= in Hgze.
+    by rewrite -{1}Du (inj_eq (Inode g)) z_to_g in Hnz.
+  case Hfz: (z == face z); first by rewrite Dw eq_sym z_to_g in Hfz.
+  rewrite /glink /relU /predU /frel /= -!(eq_sym z) Hez Hnz Hfz /= in Hgze.
   apply: (connect_trans _ (connect1 (clinkN _))).
-  pose v := @g' (negbI Hez); apply connect_trans with v.
+  have Hezin : edge z \in predC1 z; first by rewrite /predC1 /in_mem /= eq_sym (negbT Hez).
+  pose v := @g' Hezin; apply connect_trans with v.
     rewrite Sclink; apply connect1; apply/clinkP; right.
-    apply to_g_inj; apply Inode; rewrite /= /skip1 -(monic2F_eqd (Enode g)).
-    by rewrite eqd_sym Hnz Eedge.
+    apply to_g_inj; apply Inode; rewrite /= /skip1; rewrite eq_sym -(canF_eq (Enode g)).
+    by rewrite eq_sym Hnz Eedge.
   rewrite clink_glink.
-  apply: (connect_sub (fun _ _ H => connect1 (sub_relUl _ H))).
+  apply: (connect_sub (fun _ _ H => connect1 (subrelUl _ H))).
   apply (not_cross_edge_walkup Hgze); [ done | rewrite /= -Dw /skip1 ].
-  by rewrite -(monic2F_eqd (Eedge g)) eqd_sym Hez.
+  by rewrite eq_sym -(canF_eq (Eedge g)) eq_sym Hez.
 rewrite /disconnected ltnNge leq_eqVlt ltnS leqn0 -z_barb_comp orbC in Hdz.
 case/idP: Hdz {Hgze}; case Hbz: z_barb; [ done | apply/eqP ].
-case/pred0Pn: Hbz => [x]; move/andP=> [Hzx Hx]; pred u := @g' Hx.
+case/subsetPn: Hbz => [x]; move=> [Hzx Hx]; pose u := @g' Hx.
 rewrite -(@eq_n_comp_r _ (closure clink (pred2 u u))).
   by rewrite (n_comp_closure2 (Sclink walkupE)) connect0.
 move=> v; apply/pred0Pn/pred0Pn; case=> [w]; move/andP=> [Hvw Dw].
-  exists w; rewrite /pred2 orbb in Dw.
-  by rewrite /predI Hvw /preimage -((u =P w) Dw).
-exists u; rewrite /predI /pred2 orbb eqxx andbT; apply: (connect_trans Hvw).
+  exists w; rewrite /pred2 memE /= orbb in Dw.
+  rewrite /= in Hvw. rewrite /in_mem /= in Hzx.
+  by rewrite /predI /= Hvw /preim ((w =P u) Dw) !inE /=.
+exists u; rewrite /predI /pred2 memE /= orbb eqxx andbT; apply: (connect_trans Hvw).
 case/clinkP: Dw; case/clinkP: Hzx; move=> Dx Dw; auto.
 - by apply eq_connect0; apply to_g_inj; apply Inode; rewrite -Dw.
 - by rewrite Sclink; auto.
 by apply eq_connect0; apply to_g_inj; rewrite -Dw.
 Qed.
 
-Let ae x := has (cedge x) (seq2 z (node z)).
+Let ae x := has (cedge x) [:: z; (node z)].
 
 Remark Hae : fclosed edge (predC ae).
 Proof. by move=> x y; move/eqP=> <-; rewrite /predC /ae /= -!cedge1. Qed.
@@ -347,11 +353,12 @@ Remark adj_ae : fun_adjunction (@g) edge edge (predC ae).
 Proof.
 apply: (strict_adjunction (Sedge walkupE) Hae to_g_inj).
   apply/subsetP => x Haex.
-  case Hx: (z == x); last by exact (codom_f _ (@g' (negbI Hx))).
-  by rewrite -(eqP Hx) /predC /ae /= connect0 in Haex.
-move=> [x Hx] [y Hy]; move/negbE2=> Haex; apply: {y Hy}base_skip_edge.
-rewrite /predC mem_seq2 /=; apply/orP=> [Dx]; case/orP: Haex.
-rewrite /seq1 /=; case: Dx; move/eqP=> <- {x Hx}.
+  case Hx: (x \in predC1 z); first by exact (codom_f _ (@g' Hx)).
+  rewrite inE /= in Hx.
+  by rewrite (eqP (negbFE Hx)) /predC /ae inE /= connect0 in Haex.
+move=> [x Hx] [y Hy]. move/negbNE=> Haex; apply: {y Hy}base_skip_edge.
+rewrite /= mem_seq2 /=; apply/orP=> [Dx]; case/orP: Haex.
+rewrite /=; case: Dx; move/eqP=> -> {x Hx}.
   by left; rewrite cedge1 Eface connect0.
 by right; rewrite connect0.
 Qed.
@@ -365,29 +372,32 @@ Lemma sub_cskip_edge : negb cross_edge -> forall u v,
 Proof.
 move=> Hz u v Huv; case Hez: (z == edge z).
   apply: (etrans (eq_fconnect (glink_fp_skip_edge _) _ _)).
-    by apply/orP; left; rewrite eqd_sym in Hez.
+    by apply/orP; left; rewrite eq_sym in Hez.
   by rewrite fconnect_skip.
 case/connectP: Huv => [p].
 elim: {p}(S (size p)) {-2}p u (ltnSn (size p)) => [|n Hrec] //.
 move=> [|y p] u /= Hn; first by move=> *; apply eq_connect0; apply to_g_inj.
  move/andP=> [Dy Hp] Ep; case Hy: (z == y).
-  case: p => [|ez p] /= in Hn Hp Ep |- *; first by rewrite Ep z_to_g in Hy.
+  case: p => [|ez p] /= in Hn Hp Ep |- *; first by rewrite -Ep eq_sym z_to_g in Hy.
   case/andP: Hp => [Dez Hp].
   have Eu: @g u = node (face z) by rewrite (eqP Hy) -(eqP Dy) Eedge.
-  have Eu': @g (@g' (negbI Hez)) = edge z by done.
+  have Hez' : edge z \in predC1 z by rewrite /predC1 inE /= eq_sym Hez.
+  have Eu': @g (@g' Hez') = edge z by done.
   rewrite -(same_cedge (not_cross_edge_walkup Hz Eu' Eu)).
   move: Hp Ep; rewrite -(eqP Dez) -(eqP Hy) -{1 2}Eu'.
   exact: Hrec (ltnW Hn).
-apply: connect_trans (Hrec _ (@g' (negbI Hy)) Hn Hp Ep).
+have Hy' : y \in predC1 z by rewrite /predC1 inE /= eq_sym Hy.
+apply: connect_trans (Hrec _ (@g' Hy') Hn Hp Ep).
 case Hfy: (z == face y).
-  have Eeu: @g (edge u) = edge z by rewrite /= /skip_edge1 Hez (eqP Dy) Hfy.
+  have Eeu: @g (edge u) = edge z by rewrite /= /skip_edge1 eq_sym Hez (eqP Dy) eq_sym Hfy.
   have Hnfz: (negb (z == node (face z))).
-    by rewrite -(monic2F_eqd (Eedge g)) eqd_sym Hez.
-  rewrite cedge1; pose u' := @g' Hnfz.
+    by rewrite -(canF_eq (Eedge g)) eq_sym Hez.
+  have Hnfz' : node (face z) \in predC1 z by rewrite /predC1 inE /= eq_sym.
+  rewrite cedge1; pose u' := @g' Hnfz'.
   apply: (connect_trans (@not_cross_edge_walkup _ _ u' _ _)); auto.
-  apply: connect1; rewrite /eqdf /eqd /= /skip_edge1 Hez Eface eqxx.
-  by rewrite {1 4}(eqP Hfy) Eface (inj_eqd (Iface g)) (eqd_sym y) Hy eqxx.
-by apply connect1; rewrite /eqdf /eqd /= /skip_edge1 Hez (eqP Dy) Hfy Hy eqxx.
+  apply: connect1; rewrite /frel /eq_op /= /skip_edge1 -(eq_sym z) Hez Eface eqxx.
+  by rewrite {2 4}(eqP Hfy) Eface (inj_eq (Iface g)) Hy eqxx.
+by apply connect1; rewrite /frel /eq_op /= /skip_edge1 -!(eq_sym z) Hez (eqP Dy) Hfy Hy eqxx.
 Qed.
 
 Lemma cskip_edge_merge : negb cross_edge ->
@@ -399,11 +409,15 @@ move=> Hz u v Hu; apply/idP/idP => [Huv|].
   exact (etrans (closed_connect Hae Huv) Hv).
 move: Hu; rewrite /ae /= !orbF.
 case Hez: (z == (edge z)).
-  have Hzz: fcycle edge (seq1 z) by rewrite /= /eqdf eqd_sym Hez.
-  rewrite -!(Sedge g z) !(fconnect_cycle Hzz (predU11 _ _)) /= /predU1 !z_to_g.
+  have Hzz: fcycle edge [:: z] by rewrite /= /frel eq_sym Hez.
+  have Hcin: forall x y z, connect x y z == (z \in connect x y) by rewrite /in_mem /=.
+  have Hzin : z \in [:: z] by rewrite inE.
+  rewrite -!(Sedge g z) !(eqP (Hcin _ _ _ _)).
+  rewrite !(fconnect_cycle Hzz Hzin) /= /predU1 !inE 2!eq_sym !z_to_g.
+  rewrite /in_mem /=.
   by move=> Hu Hv; apply (sub_cskip_edge Hz); rewrite (same_cedge Hu) Sedge.
-have Hnfz := Hez; rewrite eqd_sym (monic2F_eqd (Eedge g)) in Hnfz.
-pose uez := @g' (negbI Hez); pose unfz := @g' (negbI Hnfz).
+have Hnfz := Hez; rewrite eq_sym (canF_eq (Eedge g)) in Hnfz.
+pose uez := @g' (negbT Hez); pose unfz := @g' (negbI Hnfz).
 have Henz := (@not_cross_edge_walkup Hz uez unfz (erefl _) (erefl _)).
 rewrite cedge1r in Henz; have Eenz: @g (edge unfz) = edge (node z).
   rewrite /= /skip_edge1 Hez Eface eqxx.
@@ -428,7 +442,7 @@ case Hgzz: (glink z z).
   congr S; rewrite -(fcard_skip (Iedge g)); NatCongr; apply: eq_fcard.
   exact (glink_fp_skip_edge Hgzz).
 case: {Hgzz}(not_glink_fp (negbI Hgzz)) => [Hez Hnz Hfz].
-have Hnfz := Hez; rewrite eqd_sym (monic2F_eqd (Eedge g)) in Hnfz.
+have Hnfz := Hez; rewrite eqd_sym (cancel2F_eqd (Eedge g)) in Hnfz.
 pose unfz := @g' (negbI Hnfz); pose unz := @g' (negbI Hnz).
 have Heg := Sedge g; have Heg' := (Sedge g').
 rewrite (n_compC ae) (n_compC (preimage (@g) ae)).
@@ -502,8 +516,8 @@ Lemma base_clink_walkup :
   rel_base (@g) clink clink (seq2 (edge (node z)) (node z)).
 Proof.
 move=> [x Hx] [y Hy]; rewrite /predC mem_seq2 /=; move/norP=> [Hex Hfex].
-rewrite /clink /relU /predU /eqdf !(monic2F_eqd (f_finv (Inode _))) /=.
-rewrite {3 4}/eqd /= /skip1 -(monic2F_eqd (monicF_sym (Eface g))) (negbE Hex).
+rewrite /clink /relU /predU /eqdf !(cancel2F_eqd (f_finv (Inode _))) /=.
+rewrite {3 4}/eqd /= /skip1 -(cancel2F_eqd (cancelF_sym (Eface g))) (negbE Hex).
 by case: (z =P node y) => [<-|_] //; rewrite !(eqd_sym x) (negbE Hfex) (negbE Hx).
 Qed.
 
@@ -535,7 +549,7 @@ congr addn; rewrite /a (n_comp_connect Hsg) -(eq_n_comp_r z_comp_preimage).
 rewrite /n_comp_z; case Hdz: disconnected.
 case: (disconnected_cross_edge Hdz) => [Hgzz _]; rewrite (negbE Hgzz).
 case: (not_glink_fp Hgzz) => [_ Hfez Hfz].
-  rewrite eqd_sym (monic2F_eqd (Enode g)) in Hfez.
+  rewrite eqd_sym (cancel2F_eqd (Enode g)) in Hfez.
   apply: eqP; rewrite /= add0n eqn_leq; apply/andP; split; last by exact Hdz.
   pose u := @g' (negbI Hfez); pose v := @g' (negbI Hfz).
   rewrite -(@eq_n_comp_r _ (closure clink (pred2 u v))).
@@ -568,10 +582,10 @@ rewrite -addSn -fcard_skip_edge addnC -!addnA; symmetry.
 do 3 (rewrite addnC -!addnA; congr addn).
 rewrite /n_comp_z /glink /relU /predU /eqdf -!(eqd_sym z) z_barb_z.
 case Hnz: (z == node z).
-  rewrite -(eqd_sym (face z)) (monic2F_eqd (Eface g)) -(eqP Hnz).
+  rewrite -(eqd_sym (face z)) (cancel2F_eqd (Eface g)) -(eqP Hnz).
   by case (z == edge z).
 case Hfz: (z == face z); last by case (z == edge z).
-by rewrite -(eqd_sym (edge z)) (monic2F_eqd (Eedge g)) -(eqP Hfz) Hnz.
+by rewrite -(eqd_sym (edge z)) (cancel2F_eqd (Eedge g)) -(eqP Hfz) Hnz.
 Qed.
 
 Lemma genus_walkupE_eq : glink z z \/ negb cross_edge -> genus g' = genus g.
@@ -613,7 +627,7 @@ Lemma skip_clink_walkup : forall x' p',
   path clink x' p' = path skip_clink (@g x') (maps (@g) p').
 Proof.
 move=> x' p'; elim: p' x' => [|y' p' Hrec] x' //=; rewrite {}Hrec.
-by congr andb; congr orb; rewrite /eqdf (monic2F_eqd (f_finv (Inode walkupE))).
+by congr andb; congr orb; rewrite /eqdf (cancel2F_eqd (f_finv (Inode walkupE))).
 Qed.
 
 Lemma skip_clinkf : forall x y, skip_clink x y -> negb (x == node z) ->

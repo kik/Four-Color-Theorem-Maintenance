@@ -89,7 +89,7 @@ Proof. exact (same_connect Snode). Qed.
 Lemma same_cface : forall x y : g, cface x y -> cface x =1 cface y.
 Proof. exact (same_connect Sface). Qed.
 
-Lemma cedge1 : forall x : g, cedge x =i cedge (edge x).
+Lemma cedge1 : forall x : g, cedge x =1 cedge (edge x).
 Proof. exact (same_fconnect1 Iedge). Qed.
 Lemma cedge1r : forall y x : g, cedge x y = cedge x (edge y).
 Proof. exact (fun y x => same_fconnect1_r Iedge x y). Qed.
@@ -353,6 +353,7 @@ Lemma order_mirror_edge : forall x : g, @order mirror edge x = order edge (node 
 Proof.
 move=> x; move: mirror_edge_adj => [_ De'].
 apply: (etrans _ (card_image (Iface g) _)); apply: eq_card => [y].
+rewrite /in_mem /=. rewrite -[connect _ _ _]/(connect (frel (@edge mirror)) x y).
 rewrite cedge1 {2}/edge {4}/mirror /comp -(Enode g y) /in_mem /= (image_f _ (Iface g)).
 by rewrite -De' // (same_fconnect_finv (Iedge g)).
 Qed.
